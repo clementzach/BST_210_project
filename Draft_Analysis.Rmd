@@ -1,0 +1,19 @@
+---
+title: "Draft Analysis"
+author: "Zachary Clement"
+date: "10/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+
+run_df <- read_tsv('http://www.statsci.org/data/oz/ms212.txt')
+
+run_df <- run_df %>% mutate(bmi = height / weight^2)
+```
+
