@@ -1,0 +1,147 @@
+---
+title: "First Steps"
+author: "Addison McGhee"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = TRUE, message = F)
+```
+
+
+```{r, echo=F, include=F}
+library(tidyverse)
+library(pander)
+library(ggrepel)
+library(splines2)
+library(splines)
+library(ggthemes)
+library(gam)
+library(gridExtra)
+library(foreign)
+library(readr)
+library(pander)
+theme_update(plot.title = element_text(hjust = 0.5))
+```
+
+## Read in data and create factors
+```{r}
+dat = read_csv("heart.csv")
+dataset_wfactors = dat %>% mutate(anaemia = factor(anaemia),
+                             diabetes = factor(diabetes),
+                             high_blood_pressure = factor(high_blood_pressure),
+                             sex = factor(sex),
+                             smoking = factor(smoking),
+                             DEATH_EVENT = factor(DEATH_EVENT)
+                             )
+
+# Dataset without factors
+dataset = dataset_wfactors %>% select(-c(anaemia, diabetes, high_blood_pressure, sex, smoking, DEATH_EVENT))
+```
+
+# Missing Values
+
+```{r}
+apply(dataset_wfactors, 2, FUN = function(x) sum(is.na(x)))
+```
+
+
+# Summary Stats
+
+## Correlation Matrix
+```{r, echo=F}
+cormat <- round(cor(dataset), 2)
+
+library(reshape2)
+
+# Get lower triangle of the correlation matrix
+get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+}
+  
+  # Get upper triangle of the correlation matrix
+get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+}
+  
+reorder_cormat <- function(cormat){
+# Use correlation between variables as distance
+dd <- as.dist((1-cormat)/2)
+hc <- hclust(dd)
+cormat <-cormat[hc$order, hc$order]
+}
+
+
+# Reorder the correlation matrix
+cormat <- reorder_cormat(cormat)
+upper_tri <- get_upper_tri(cormat)
+
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+
+
+ggheatmap + 
+geom_text(aes(Var2, Var1, label = value), color = "black", size = 2) +
+theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5))
+```
+
+
+## Histograms
+
+### Continuous
+```{r}
+do = data.frame(dataset)
+for(i in 1:ncol(do)) {
+    hist(do[, i], main = names(do)[i], xlab = names(do)[i], labels = T)
+}
+```
+
+### Factors
+```{r}
+dataset_wfactors %>% select(c(anaemia, diabetes, high_blood_pressure, sex, smoking, DEATH_EVENT)) %>% apply(2, table) %>% pander
+```
+
+
+## Regression Models
+
+### Logistic
+
+```{r}
+mylogit <- glm(data = dataset_wfactors,
+               DEATH_EVENT ~ ., family = "binomial")
+
+
+pander(summary(mylogit))
+```
+
+
+
+
+
+
+
