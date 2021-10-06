@@ -138,9 +138,11 @@ logistic_1 <- glm(data = dataset_wfactors,
 pander(summary(logistic_1))
 ```
 
-### Exponentiate 95% CI to get Odds-Ratio
+&nbsp;
+
+### 95% CI for Odds-Ratios
 ```{r}
-pander(exp(confint(logistic_1)))
+logistic_1 %>% confint %>% exp %>% pander # Exponentiate to get ORs
 ```
 
 
