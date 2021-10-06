@@ -146,8 +146,10 @@ logistic_1 %>% confint %>% exp %>% pander # Exponentiate to get ORs
 ```
 
 
-
-
-
+```{r}
+dataset_wfactors %>% group_by(sex) %>% count(DEATH_EVENT) %>% pander
+dataset_wfactors %>% group_by(smoking) %>% count(DEATH_EVENT) %>% pander
+dataset_wfactors %>% group_by(anaemia) %>% count(DEATH_EVENT) %>% pander
+```
 
 
