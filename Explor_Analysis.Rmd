@@ -1,5 +1,5 @@
 ---
-title: "First Steps"
+title: "Exploratory Analysis"
 author: "Addison McGhee"
 date: "`r Sys.Date()`"
 output: html_document
@@ -22,10 +22,11 @@ library(gridExtra)
 library(foreign)
 library(readr)
 library(pander)
+library(aod)
 theme_update(plot.title = element_text(hjust = 0.5))
 ```
 
-## Read in data and create factors
+### Read in data and create factors
 ```{r}
 dat = read_csv("heart.csv")
 dataset_wfactors = dat %>% mutate(anaemia = factor(anaemia),
@@ -40,16 +41,15 @@ dataset_wfactors = dat %>% mutate(anaemia = factor(anaemia),
 dataset = dataset_wfactors %>% select(-c(anaemia, diabetes, high_blood_pressure, sex, smoking, DEATH_EVENT))
 ```
 
-# Missing Values
-
+## Missing Values
 ```{r}
 apply(dataset_wfactors, 2, FUN = function(x) sum(is.na(x)))
 ```
 
 
-# Summary Stats
+## Summary Stats
 
-## Correlation Matrix
+### Correlation Matrix
 ```{r, echo=F}
 cormat <- round(cor(dataset), 2)
 
@@ -130,13 +130,17 @@ dataset_wfactors %>% select(c(anaemia, diabetes, high_blood_pressure, sex, smoki
 ## Regression Models
 
 ### Logistic
-
 ```{r}
-mylogit <- glm(data = dataset_wfactors,
+logistic_1 <- glm(data = dataset_wfactors,
                DEATH_EVENT ~ ., family = "binomial")
 
 
-pander(summary(mylogit))
+pander(summary(logistic_1))
+```
+
+### Exponentiate 95% CI to get Odds-Ratio
+```{r}
+pander(exp(confint(logistic_1)))
 ```
 
 
