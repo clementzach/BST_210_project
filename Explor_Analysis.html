@@ -401,10 +401,11 @@ pander(summary(logistic_1))</code></pre>
 </tr>
 </tbody>
 </table>
+<p> </p>
 </div>
-<div id="exponentiate-95-ci-to-get-odds-ratio" class="section level3">
-<h3>Exponentiate 95% CI to get Odds-Ratio</h3>
-<pre class="r"><code>pander(exp(confint(logistic_1)))</code></pre>
+<div id="ci-for-odds-ratios" class="section level3">
+<h3>95% CI for Odds-Ratios</h3>
+<pre class="r"><code>logistic_1 %&gt;% confint %&gt;% exp %&gt;% pander # Exponentiate to get ORs</code></pre>
 <p>Waiting for profiling to be done…</p>
 <table style="width:72%;">
 <colgroup>
