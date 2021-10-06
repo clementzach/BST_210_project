@@ -10,10 +10,48 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library(readr)
+df <- read.csv('heart_failure_clinical_records_dataset.csv')
 
-run_df <- read_tsv('http://www.statsci.org/data/oz/ms212.txt')
 
-run_df <- run_df %>% mutate(bmi = height / weight^2)
 ```
+
+
+
+Attribute Information:
+
+Thirteen (13) clinical features: 
+
+- age: age of the patient (years) 
+- anaemia: decrease of red blood cells or hemoglobin (boolean) 
+- high blood pressure: if the patient has hypertension (boolean) 
+- creatinine phosphokinase (CPK): level of the CPK enzyme in the blood (mcg/L) 
+- diabetes: if the patient has diabetes (boolean) 
+- ejection fraction: percentage of blood leaving the heart at each contraction (percentage) 
+- platelets: platelets in the blood (kiloplatelets/mL) 
+- sex: woman or man (binary) 
+- serum creatinine: level of serum creatinine in the blood (mg/dL) 
+- serum sodium: level of serum sodium in the blood (mEq/L) 
+- smoking: if the patient smokes or not (boolean) 
+- time: follow-up period (days) 
+- [target] death event: if the patient deceased during the follow-up period (boolean) 
+
+Analysis plan: 
+
+1. We will fit a logistic regression model to assess the extent to which smoking increases the risk of death during follow-up. 
+i. We will adjust for potential confounders in order to obtain an accurate estimate of smoking on risk of death. We will adjust for age and sex, and any other variables which can be considered confounders
+ii. We will assess flexible models of age, as well as quadratic age terms in order to provide a more accurate estimate of the effect of smoking on death at follow-up
+iii. We will assess residual plots and other diagnostics to determine whether assumptions for our model are met.
+iv. We will evaluate our model fit using appropriate metrics, such as Deviance or Pseudo-R squared. 
+v. We will report a point estimate and a 95% confidence interval of the effect of smoking on death during folow-up.
+
+
+2. We will create a clinical prediction model in order to assist doctors in assessing risk of death from heart disease. 
+i. We will use a logistic regression model with an elastic net penalty in order to determine which kinds of data should be collected to make predictions, and in order to estimate $\beta$ coefficients which can be used to make predictions.
+ii. We will use F1 scores to select the best value of $\alpha$ and $\lambda$ to use to create our model.
+iii. We will report AUC, and determine the best cutoff for prediction in our model. 
+
+3. We will fit a Cox proportional hazards model to assess the relationship between smoking and time of dying during follow-up
+i. We will adjust for the same confounders adjusted for in our logistic regression model, and we will flexibly model age if necessary. 
+ii. We will use diagnostic plots to determine whether model assumptions are met.
+iii. We will report a point estimate and 95% confidence interval of a hazard ratio for the relationship between smoking and early death. 
 
