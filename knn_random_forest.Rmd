@@ -1,0 +1,64 @@
+---
+title: "KNN, random forest"
+author: "Zachary Clement"
+date: "10/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(class)
+library(caret)
+
+```
+
+```{r}
+df <- read.csv('heart_failure_clinical_records_dataset.csv')
+
+```
+
+## K nearest neighbors
+```{r}
+num_tests <- 50
+k_num <- numeric(num_tests)
+accuracy <- numeric(num_tests)
+ppv <- numeric(num_tests)
+npv <- numeric(num_tests)
+sens <- numeric(num_tests)
+spec <- numeric(num_tests)
+f1 <- numeric(num_tests)
+
+for (i in 1:num_tests){
+  k <- i + 1
+preds <- class::knn.cv(train = df %>% select(-c(DEATH_EVENT, time)), cl = factor(df$DEATH_EVENT), k = k, prob = T)
+k_num[i] <- k
+accuracy[i] <- mean(preds == df$DEATH_EVENT)
+current_table <- table(preds, actual =df$DEATH_EVENT)
+
+sens[i] <- current_table[2, 2] / (current_table[2, 2] + current_table[1, 2])
+spec[i] <- current_table[1, 1] / (current_table[1, 1] + current_table[2, 1])
+npv[i] <- current_table[2, 2] / (current_table[2, 2] + current_table[2, 1])
+ppv[i] <- current_table[1, 1] / (current_table[1, 1] + current_table[1, 2])
+f1[i] <- 2 * sens[i] * spec[i]/ (sens[i] + spec[i])
+
+}
+
+metrics_df <- data.frame(k_num, accuracy, ppv, npv, sens, spec, f1)
+
+ggplot(data = metrics_df, aes(x = k_num)) + 
+  geom_line(aes(y = accuracy, col = "Accuracy")) +
+  geom_line(aes(y = ppv, col = "PPV")) +
+  geom_line(aes(y = npv, col = "NPV")) +
+  geom_line(aes(y = sens, col = "Sensitivity")) +
+  geom_line(aes(y = sens, col = "Specificity")) +
+geom_line(aes(y = f1, col = "F1")) 
+  
+
+```
+
+
+```{r}
+randomForest::randomForest()
+
+```
+
