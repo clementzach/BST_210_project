@@ -41,15 +41,22 @@ dataset_wfactors = dat %>% mutate(anaemia = factor(anaemia),
 dataset = dataset_wfactors %>% select(-c(anaemia, diabetes, high_blood_pressure, sex, smoking, DEATH_EVENT))
 ```
 
+**As with any exploratory analysis, the first step is to determine which variable are categorical, and which are continuous. We see that there are 6 categorical variables in this dataset. They were converted to `factors` to ensure ease of use with $R's$ functions.**
+
+&nbsp;
+
 ## Missing Values
 ```{r}
 apply(dataset_wfactors, 2, FUN = function(x) sum(is.na(x)))
 ```
 
+**The next step was to screen for missing values as many $R$ functions cannot handle NAs. In addition, missing values can be due to underlying issues with the treatment and/or data collection procedure. Fortunately, the data does not have any missingness.**
+
+&nbsp;
 
 ## Summary Stats
 
-### Correlation Matrix
+### Continuous Correlation Matrix
 ```{r, echo=F}
 cormat <- round(cor(dataset), 2)
 
@@ -110,10 +117,15 @@ theme(
                 title.position = "top", title.hjust = 0.5))
 ```
 
+&nbsp;
+
+**The above graphic indicates positive and negative associations between variables. There also is a clear clustering among certain variables that share a common direction of association. We notice moderate negative relationshps between time/age, time/serum_creatinine, and serum_sodium/serum_creatinine. Our next step will be to gain additional insight into the biological mechanisms that explain why certain variables associate with each other.**
+
+&nbsp;
 
 ## Histograms
 
-### Continuous
+### Continuous Variables
 ```{r}
 do = data.frame(dataset)
 for(i in 1:ncol(do)) {
@@ -121,15 +133,31 @@ for(i in 1:ncol(do)) {
 }
 ```
 
+&nbsp;
+
+**The histograms showcase the different distributions present in the data. The variables of serum_creatinine, creatinine_phosphokinase, and age have a right-skew, while serum_sodium, platelets, and ejection_fraction are more normally distributed. The variable time is more uniformly distributed. Again, more domain knowledge will give us a better understanding of the typical distributions that these variables take. This will be useful in helping us gauge the generalizability of our results.**
+
+&nbsp;
+
 ### Factors
 ```{r}
 dataset_wfactors %>% select(c(anaemia, diabetes, high_blood_pressure, sex, smoking, DEATH_EVENT)) %>% apply(2, table) %>% pander
 ```
 
+```{r}
+dataset_wfactors %>% group_by(sex) %>% count(DEATH_EVENT) %>% pander
+dataset_wfactors %>% group_by(smoking) %>% count(DEATH_EVENT) %>% pander
+dataset_wfactors %>% group_by(anaemia) %>% count(DEATH_EVENT) %>% pander
+```
+
+**The above tables show a common ration of `2 to 1` for many of the factors. Smoking/non-Smoking is roughly 2:1, as is high/not-high blood pressure. This is also true when we look at the counts for Death-event for each sex; the ratio of dying to not dying is roughly `2 to 1` for both men and women.**
+
+
+&nbsp;
 
 ## Regression Models
 
-### Logistic
+### Initial Logistic Screening (all variables)
 ```{r}
 logistic_1 <- glm(data = dataset_wfactors,
                DEATH_EVENT ~ ., family = "binomial")
@@ -140,16 +168,13 @@ pander(summary(logistic_1))
 
 &nbsp;
 
+**The inital screening above provides evidence of which terms might be most useful in predicting the death_event outcome. In particular, it seems that age, ejection_fraction, serum_creatinine, and time are the most significant covariates in our model. Further steps will be to use other metrics (AIC, BIC, etc.) to perform model selection and assess our model.**
+
+&nbsp;
+
 ### 95% CI for Odds-Ratios
 ```{r}
 logistic_1 %>% confint %>% exp %>% pander # Exponentiate to get ORs
-```
-
-
-```{r}
-dataset_wfactors %>% group_by(sex) %>% count(DEATH_EVENT) %>% pander
-dataset_wfactors %>% group_by(smoking) %>% count(DEATH_EVENT) %>% pander
-dataset_wfactors %>% group_by(anaemia) %>% count(DEATH_EVENT) %>% pander
 ```
 
 
