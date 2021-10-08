@@ -129,7 +129,8 @@ theme(
 ```{r}
 do = data.frame(dataset)
 for(i in 1:ncol(do)) {
-    hist(do[, i], main = names(do)[i], xlab = names(do)[i], labels = T)
+    h = hist(do[, i], main = names(do)[i], xlab = names(do)[i])
+    text(h$mids,h$counts,labels=h$counts, adj=c(0.5, -0.5), cex = 0.6, col = "red")
 }
 ```
 
