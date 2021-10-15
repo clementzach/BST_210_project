@@ -1,8 +1,10 @@
 ---
 title: "Exploratory Analysis"
-author: "Addison McGhee"
+author: "Naive Frequentists"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=F}
@@ -38,7 +40,8 @@ dataset_wfactors = dat %>% mutate(anaemia = factor(anaemia),
                              )
 
 # Dataset without factors
-dataset = dataset_wfactors %>% select(-c(anaemia, diabetes, high_blood_pressure, sex, smoking, DEATH_EVENT))
+dataset = dataset_wfactors %>% 
+  select(-c(anaemia, diabetes, high_blood_pressure, sex, smoking, DEATH_EVENT))
 ```
 
 **As with any exploratory analysis, the first step is to determine which variable are categorical, and which are continuous. We see that there are 6 categorical variables in this dataset. They were converted to `factors` to ensure ease of use with $R's$ functions.**
@@ -49,6 +52,8 @@ dataset = dataset_wfactors %>% select(-c(anaemia, diabetes, high_blood_pressure,
 ```{r}
 apply(dataset_wfactors, 2, FUN = function(x) sum(is.na(x)))
 ```
+
+&nbsp;
 
 **The next step was to screen for missing values as many $R$ functions cannot handle NAs. In addition, missing values can be due to underlying issues with the treatment and/or data collection procedure. Fortunately, the data does not have any missingness.**
 
@@ -130,7 +135,8 @@ theme(
 do = data.frame(dataset)
 for(i in 1:ncol(do)) {
     h = hist(do[, i], main = names(do)[i], xlab = names(do)[i])
-    text(h$mids,h$counts,labels=h$counts, adj=c(0.5, -0.5), cex = 0.6, col = "red")
+    text(h$mids, h$counts, labels=h$counts, adj=c(0.5, -0.5), cex = 0.6, col = "red")
+    print("")
 }
 ```
 
@@ -142,7 +148,9 @@ for(i in 1:ncol(do)) {
 
 ### Factors
 ```{r}
-dataset_wfactors %>% select(c(anaemia, diabetes, high_blood_pressure, sex, smoking, DEATH_EVENT)) %>% apply(2, table) %>% pander
+dataset_wfactors %>% 
+  select(c(anaemia, diabetes, high_blood_pressure, sex, smoking, DEATH_EVENT)) %>% 
+  apply(2, table) %>% pander
 ```
 
 ```{r}
@@ -175,7 +183,7 @@ pander(summary(logistic_1))
 
 ### 95% CI for Odds-Ratios
 ```{r}
-logistic_1 %>% confint %>% exp %>% pander # Exponentiate to get ORs
+logistic_1 %>% confint %>% exp %>% pander # Exponentiate
 ```
 
 
