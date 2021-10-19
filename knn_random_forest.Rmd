@@ -11,13 +11,20 @@ library(class)
 library(dplyr)
 library(randomForest)
 library(ggplot2)
+library(patchwork)
 
 ```
 
 Link to dataset: https://archive.ics.uci.edu/ml/datasets/Heart+failure+clinical+records
 
 ```{r}
-df <- read.csv('heart_failure_clinical_records_dataset.csv')
+df_raw <- read.csv('heart_failure_clinical_records_dataset.csv')
+
+
+
+df <- df_raw %>% scale() %>% as.data.frame()
+
+df$DEATH_EVENT <- df_raw$DEATH_EVENT
 
 t.test(formula = age ~ DEATH_EVENT, data = df)
 
@@ -143,7 +150,9 @@ f1[i] <- 2 * sens[i] * spec[i]/ (sens[i] + spec[i])
 
 metrics_df <- data.frame(k_num, accuracy, ppv, npv, sens, spec, f1)
 
-ggplot(data = metrics_df, aes(x = test_num)) + 
+knn_metrics_df <- metrics_df
+
+knn_plot <- ggplot(data = metrics_df, aes(x = test_num)) + 
   geom_line(aes(y = accuracy, col = "Accuracy")) +
   geom_line(aes(y = ppv, col = "PPV")) +
   geom_line(aes(y = npv, col = "NPV")) +
@@ -151,6 +160,8 @@ ggplot(data = metrics_df, aes(x = test_num)) +
   geom_line(aes(y = sens, col = "Specificity")) +
 geom_line(aes(y = f1, col = "F1")) +
   ggtitle("Metrics for a single k value")
+
+knn_plot
 ```
 
 
@@ -206,7 +217,9 @@ f1[i] <- 2 * sens[i] * spec[i]/ (sens[i] + spec[i])
 
 metrics_df <- data.frame(test_num, accuracy, ppv, npv, sens, spec, f1)
 
-ggplot(data = metrics_df, aes(x = test_num)) + 
+rf_metrics_df <- metrics_df
+
+rf_plot <- ggplot(data = metrics_df, aes(x = test_num)) + 
   geom_line(aes(y = accuracy, col = "Accuracy")) +
   geom_line(aes(y = ppv, col = "PPV")) +
   geom_line(aes(y = npv, col = "NPV")) +
@@ -215,6 +228,9 @@ ggplot(data = metrics_df, aes(x = test_num)) +
 geom_line(aes(y = f1, col = "F1")) +
   ggtitle("Random Forest Metrics")
 
+rf_plot
+
+rf_plot +knn_plot
 
 ```
 
