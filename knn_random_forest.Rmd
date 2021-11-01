@@ -8,18 +8,36 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(class)
-library(caret)
+library(dplyr)
+library(randomForest)
+library(ggplot2)
+library(patchwork)
 
 ```
 
+Link to dataset: https://archive.ics.uci.edu/ml/datasets/Heart+failure+clinical+records
+
 ```{r}
-df <- read.csv('heart_failure_clinical_records_dataset.csv')
+df_raw <- read.csv('heart_failure_clinical_records_dataset.csv')
+
+
+
+df <- df_raw %>% scale() %>% as.data.frame()
+
+df$DEATH_EVENT <- df_raw$DEATH_EVENT
+
+t.test(formula = age ~ DEATH_EVENT, data = df)
 
 ```
 
 ## K nearest neighbors
-```{r}
-num_tests <- 50
+```{r knn_variable}
+
+### KNN metrics using variable k values
+n_fold <- 10
+max_k <- 30
+
+num_tests <- max_k - 1
 k_num <- numeric(num_tests)
 accuracy <- numeric(num_tests)
 ppv <- numeric(num_tests)
@@ -28,17 +46,38 @@ sens <- numeric(num_tests)
 spec <- numeric(num_tests)
 f1 <- numeric(num_tests)
 
-for (i in 1:num_tests){
-  k <- i + 1
-preds <- class::knn.cv(train = df %>% select(-c(DEATH_EVENT, time)), cl = factor(df$DEATH_EVENT), k = k, prob = T)
+for (k in 2:max_k){
+  rand_order <- sample(1:nrow(df), size = nrow(df), replace = F) #this sorts the indices into a random order for sampling
+  preds <- numeric(nrow(df))
+  
+  for (j in 0:n_fold){
+    lowest_num <- round((nrow(df) / n_fold) * (j - 1) ) #This needs to be 0 when j = 1
+    highest_num <- round((nrow(df) / n_fold) * j )
+    fold_indices <- rand_order[lowest_num:highest_num] #grabs about 1/n_fold of the indices
+    # print(paste(lowest_num, "to", highest_num))
+    curr_test <- df %>% slice(fold_indices) #grab 1/n_fold of the data for test set
+    curr_train <- df %>% slice(-fold_indices) #everything else
+    fold_preds <- class::knn(train = curr_train %>% select(-c(DEATH_EVENT, time)), #train using all variables except outcome and time
+                      cl = factor(curr_train$DEATH_EVENT), 
+                      test = curr_test %>% select(-c(DEATH_EVENT, time)),
+                      k = k, # number of neighbors corresponds to larger loop iteration
+                      prob = F)
+    preds[fold_indices] <- fold_preds %>% as.character() %>% as.numeric() #assign the rows selected by the indices to the values of the predictors
+    
+    
+  }
+
+  
+i <- k - 1 #this number fills the vectors correctly
 k_num[i] <- k
 accuracy[i] <- mean(preds == df$DEATH_EVENT)
 current_table <- table(preds, actual =df$DEATH_EVENT)
 
-sens[i] <- current_table[2, 2] / (current_table[2, 2] + current_table[1, 2])
-spec[i] <- current_table[1, 1] / (current_table[1, 1] + current_table[2, 1])
-npv[i] <- current_table[2, 2] / (current_table[2, 2] + current_table[2, 1])
-ppv[i] <- current_table[1, 1] / (current_table[1, 1] + current_table[1, 2])
+# 1 means that they died
+sens[i] <- sum(preds == 1 & df$DEATH_EVENT == 1) / sum(df$DEATH_EVENT == 1) 
+spec[i] <- sum(preds == 0 & df$DEATH_EVENT == 0) / sum(df$DEATH_EVENT == 0)
+npv[i] <- sum(preds == 0 & df$DEATH_EVENT == 0) / sum(preds == 0)
+ppv[i] <- sum(preds == 1 & df$DEATH_EVENT == 1) / sum(preds == 1)
 f1[i] <- 2 * sens[i] * spec[i]/ (sens[i] + spec[i])
 
 }
@@ -57,8 +96,141 @@ geom_line(aes(y = f1, col = "F1"))
 ```
 
 
-```{r}
-randomForest::randomForest()
+```{r knn_fixed}
+#KNN metrics using one value of k
+
+n_fold <- 10
+k_val <- 6 #this seemed like a good one from the above plot
+num_tests <- 50
+
+test_num <- 1:num_tests
+k_num <- numeric(num_tests)
+accuracy <- numeric(num_tests)
+ppv <- numeric(num_tests)
+npv <- numeric(num_tests)
+sens <- numeric(num_tests)
+spec <- numeric(num_tests)
+f1 <- numeric(num_tests)
+
+for (i in 1:num_tests){
+  rand_order <- sample(1:nrow(df), size = nrow(df), replace = F) #this sorts the indices into a random order for sampling
+  preds <- numeric(nrow(df))
+  
+  for (j in 0:n_fold){
+    lowest_num <- round((nrow(df) / n_fold) * (j - 1) ) #This needs to be 0 when j = 1
+    highest_num <- round((nrow(df) / n_fold) * j )
+    fold_indices <- rand_order[lowest_num:highest_num] #grabs about 1/n_fold of the indices
+    # print(paste(lowest_num, "to", highest_num))
+    curr_test <- df %>% slice(fold_indices) #grab 1/n_fold of the data for test set
+    curr_train <- df %>% slice(-fold_indices) #everything else
+    fold_preds <- class::knn(train = curr_train %>% select(-c(DEATH_EVENT, time)), #train using all variables except outcome and time
+                      cl = factor(curr_train$DEATH_EVENT), 
+                      test = curr_test %>% select(-c(DEATH_EVENT, time)),
+                      k = k_val, # number of neighbors fixed in this loop
+                      prob = F)
+    preds[fold_indices] <- fold_preds %>% as.character() %>% as.numeric() #assign the rows selected by the indices to the values of the predictors
+    
+    
+  }
+
+  
+
+
+accuracy[i] <- mean(preds == df$DEATH_EVENT)
+current_table <- table(preds, actual =df$DEATH_EVENT)
+
+# 1 means that they died
+sens[i] <- sum(preds == 1 & df$DEATH_EVENT == 1) / sum(df$DEATH_EVENT == 1) 
+spec[i] <- sum(preds == 0 & df$DEATH_EVENT == 0) / sum(df$DEATH_EVENT == 0)
+npv[i] <- sum(preds == 0 & df$DEATH_EVENT == 0) / sum(preds == 0)
+ppv[i] <- sum(preds == 1 & df$DEATH_EVENT == 1) / sum(preds == 1)
+f1[i] <- 2 * sens[i] * spec[i]/ (sens[i] + spec[i])
+
+}
+
+metrics_df <- data.frame(k_num, accuracy, ppv, npv, sens, spec, f1)
+
+knn_metrics_df <- metrics_df
+
+knn_plot <- ggplot(data = metrics_df, aes(x = test_num)) + 
+  geom_line(aes(y = accuracy, col = "Accuracy")) +
+  geom_line(aes(y = ppv, col = "PPV")) +
+  geom_line(aes(y = npv, col = "NPV")) +
+  geom_line(aes(y = sens, col = "Sensitivity")) +
+  geom_line(aes(y = sens, col = "Specificity")) +
+geom_line(aes(y = f1, col = "F1")) +
+  ggtitle("Metrics for a single k value")
+
+knn_plot
+```
+
+
+
+```{r random_forest}
+
+n_fold <- 10
+num_tests <- 50
+test_num <- 1:num_tests
+accuracy <- numeric(num_tests)
+ppv <- numeric(num_tests)
+npv <- numeric(num_tests)
+sens <- numeric(num_tests)
+spec <- numeric(num_tests)
+f1 <- numeric(num_tests)
+
+for (i in 1:num_tests){
+
+  rand_order <- sample(1:nrow(df), size = nrow(df), replace = F)
+  preds <- numeric(nrow(df))
+  
+  for (j in 0:(n_fold-1)){
+    lowest_num <- round((nrow(df) / n_fold) * j )
+    highest_num <- round((nrow(df) / n_fold) * (j +1) )
+    fold_indices <- rand_order[lowest_num:highest_num]
+    # print(paste(lowest_num, "to", highest_num))
+    curr_test <- df %>% slice(fold_indices) #grab 1/5 of the data
+    curr_train <- df %>% slice(-fold_indices) #everything else
+    rf <-randomForest::randomForest(y = factor(curr_train$DEATH_EVENT), 
+                                    x =  curr_train %>% select(-c(DEATH_EVENT, time)),
+                                    xtest = curr_test %>% select(-c(DEATH_EVENT, time)))
+    
+    
+    fold_preds <- rf$test$predicted
+    preds[fold_indices] <- fold_preds %>% as.character() %>% as.numeric() #assign the rows selected by the indices to the values of the predictors
+    
+    
+  }
+
+  
+
+accuracy[i] <- mean(preds == df$DEATH_EVENT)
+current_table <- table(preds, actual =df$DEATH_EVENT)
+
+# 1 means that they died
+sens[i] <- sum(preds == 1 & df$DEATH_EVENT == 1) / sum(df$DEATH_EVENT == 1) 
+spec[i] <- sum(preds == 0 & df$DEATH_EVENT == 0) / sum(df$DEATH_EVENT == 0)
+npv[i] <- sum(preds == 0 & df$DEATH_EVENT == 0) / sum(preds == 0)
+ppv[i] <- sum(preds == 1 & df$DEATH_EVENT == 1) / sum(preds == 1)
+f1[i] <- 2 * sens[i] * spec[i]/ (sens[i] + spec[i])
+
+}
+
+metrics_df <- data.frame(test_num, accuracy, ppv, npv, sens, spec, f1)
+
+rf_metrics_df <- metrics_df
+
+rf_plot <- ggplot(data = metrics_df, aes(x = test_num)) + 
+  geom_line(aes(y = accuracy, col = "Accuracy")) +
+  geom_line(aes(y = ppv, col = "PPV")) +
+  geom_line(aes(y = npv, col = "NPV")) +
+  geom_line(aes(y = sens, col = "Sensitivity")) +
+  geom_line(aes(y = sens, col = "Specificity")) +
+geom_line(aes(y = f1, col = "F1")) +
+  ggtitle("Random Forest Metrics")
+
+rf_plot
+
+rf_plot +knn_plot
 
 ```
 
