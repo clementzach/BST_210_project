@@ -1,0 +1,114 @@
+---
+title: "Logistic Regression and Classification"
+author: "Naive Frequentists"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = TRUE, message = F)
+```
+
+
+```{r, include=F}
+library(foreign)
+library(gam)
+library(ggrepel)
+library(ggthemes)
+library(gridExtra)
+library(magrittr)
+library(nnet)
+library(pander)
+library(splines)
+library(splines2)
+library(tidyverse)
+library(VGAM)
+library(pscl)
+library(vcd)
+library(AER)
+options(digits = 3)
+theme_update(plot.title = element_text(hjust = 0.5))
+```
+
+b. (10pts) Logistic, multinomial, ordinal:
+i. If your analysis plan includes any of these approaches, please begin fitting such
+    models, performing diagnostics and evaluation, model selection, GOF, interpretations,
+etc. Please give some summary bullet points including model statements, whether assumptions are met, fitted model interpretations, plots which might be important, etc.
+
+
+```{r, include=F}
+dat = read_csv("heart.csv")
+dataset_wfactors = dat %>% mutate(anaemia = factor(anaemia),
+                             diabetes = factor(diabetes),
+                             high_blood_pressure = factor(high_blood_pressure),
+                             sex = factor(sex),
+                             smoking = factor(smoking),
+                             DEATH_EVENT = factor(DEATH_EVENT)
+                             )
+
+# Dataset without factors
+dataset_no_factors = dataset_wfactors %>% 
+  select(-c(anaemia, diabetes, high_blood_pressure, sex, smoking, DEATH_EVENT))
+```
+
+&nbsp;
+
+## Logistic Regression
+
+**Assumptions:**\
+
+1. **The outcome `Death Event` $\sim Binomial(1, p)$, with the sample being IID.**\
+It is reasonable to assume that patients are independent with a constant probability of an event
+
+&nbsp;
+
+2. **$\mathbb{E}[\textit{Death Event}] = P(Death\;Event = 1) = p$ is linear on the logit scale $\left(logit(p) = \frac{p}{1 - p}\right)$.**\
+We can assess this assumption through an analysis of the residuals. We will note any non-linear trends.
+
+&nbsp;
+
+3. **~10-20 events ($Death\;Event = 1$) per covariate.**\
+This assumption is almost met as we have 96 events and 12 covariates => 8 events per covariate. After doing an initial screening, we will reduce the number of predictors and be able to satisfy this requirement.
+
+&nbsp;
+
+```{r}
+logi_fit = glm(data = dataset_wfactors, DEATH_EVENT ~ ., family = binomial())
+pander(summary(logi_fit))
+```
+
+&nbsp;
+
+**It appears that `age`, `ejection_fraction`, `serum_creatinine`, and `time` are the only covariates that are statistically significant at the standard 0.05 level. Before proceeding with further modeling, we will first check model diagnostics for this initial fit:**
+
+&nbsp;
+
+### Distribution of Fitted values and Leverage (hat-values)
+```{r}
+ggplot(dataset_wfactors, aes(logi_fit$fitted.values)) + geom_histogram() + ggtitle("p-hats") + xlab("p-hats")
+ggplot(dataset_wfactors, aes(hatvalues(logi_fit))) + geom_histogram() + ggtitle("hat-values") + xlab("hat-values")
+```
+
+&nbsp;
+
+### Cook's Distance
+```{r}
+influencePlot(logi_fit, col = "red")
+```
+
+&nbsp;
+
+### Residual analysis
+```{r}
+residualPlots(logi_fit)
+```
+
+&nbsp;
+
+### Outlier Test
+```{r}
+outlierTest(logi_fit)
+```
+
+
+
