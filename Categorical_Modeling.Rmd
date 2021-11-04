@@ -1,5 +1,5 @@
 ---
-title: "Logistic Regression and Classification"
+title: "Logistic Regression"
 author: "Naive Frequentists"
 date: "`r Sys.Date()`"
 output: html_document
@@ -30,11 +30,6 @@ options(digits = 3)
 theme_update(plot.title = element_text(hjust = 0.5))
 ```
 
-b. (10pts) Logistic, multinomial, ordinal:
-i. If your analysis plan includes any of these approaches, please begin fitting such
-    models, performing diagnostics and evaluation, model selection, GOF, interpretations,
-etc. Please give some summary bullet points including model statements, whether assumptions are met, fitted model interpretations, plots which might be important, etc.
-
 
 ```{r, include=F}
 dat = read_csv("heart.csv")
@@ -53,7 +48,14 @@ dataset_no_factors = dataset_wfactors %>%
 
 &nbsp;
 
-## Logistic Regression
+
+```{r}
+apply(dataset_wfactors, 2, function(x) sum(is.na(x)))
+```
+
+&nbsp;
+
+## Logistic Regression (Initial Screening)
 
 **Assumptions:**\
 
@@ -62,19 +64,20 @@ It is reasonable to assume that patients are independent with a constant probabi
 
 &nbsp;
 
-2. **$\mathbb{E}[\textit{Death Event}] = P(Death\;Event = 1) = p$ is linear on the logit scale $\left(logit(p) = \frac{p}{1 - p}\right)$.**\
+2. **$\mathbb{E}[\textit{Death Event} | X] = P(Death\;Event = 1) = p$ is linear on the logit scale $\left(logit(p) = \frac{p}{1 - p}\right)$.**\
 We can assess this assumption through an analysis of the residuals. We will note any non-linear trends.
 
 &nbsp;
 
 3. **~10-20 events ($Death\;Event = 1$) per covariate.**\
-This assumption is almost met as we have 96 events and 12 covariates => 8 events per covariate. After doing an initial screening, we will reduce the number of predictors and be able to satisfy this requirement.
+This assumption is met as we have 35 events and our logistic LASSO fit has 3 covariates => 11.667 events per covariate. 
 
 &nbsp;
 
 ```{r}
 logi_fit = glm(data = dataset_wfactors, DEATH_EVENT ~ ., family = binomial())
 pander(summary(logi_fit))
+AIC(logi_fit)
 ```
 
 &nbsp;
@@ -98,8 +101,13 @@ influencePlot(logi_fit, col = "red")
 
 &nbsp;
 
+**Observations 132, 187, and 196 only have large Studentized residuals, with their leverage and Cook's D. being small. Conversely, observation 61 has a small Studentized residual and Cook's D but a large leverage value. Likewise, observation 218 has a moderate Studentized residual and large leverage and Cook's D values.**
+
+&nbsp;
+
 ### Residual analysis
 ```{r}
+par(mfrow = c(1, 2))
 residualPlots(logi_fit)
 ```
 
@@ -110,5 +118,19 @@ residualPlots(logi_fit)
 outlierTest(logi_fit)
 ```
 
+&nbsp;
 
+**Not surprisingly, only observation 187 became a statistically significant outlier. This is because it has the largest studentized residual value.**
+
+**Based on the above, it seems that 218 may be the most "influential" observation, while observation 187 is the most significant outlier. We will re-run the above analysis with these points removed and note any appreciable change in the coefficients:**
+
+&nbsp;
+
+### Interpretations of Beta Coefficients:
+
+```{r}
+
+```
+
+&nbsp;
 
