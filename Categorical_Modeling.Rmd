@@ -59,17 +59,17 @@ apply(dataset_wfactors, 2, function(x) sum(is.na(x)))
 
 **Assumptions:**\
 
-1. **The outcome `Death Event` $\sim Binomial(1, p)$, with the sample being independent and identically distributed (IID).**\
+1. **The outcome `Heart Failure` $\sim Binomial(1, p)$, with the sample being independent and identically distributed (IID).**\
 It is reasonable to assume that patients are independent with a constant probability of an event, and that they come from the same underlying population.
 
 &nbsp;
 
-2. **$\mathbb{E}[\textit{Death Event} | X] = P(Death\;Event = 1) = p$ is linear on the logit scale $\left(logit(p) = \frac{p}{1 - p}\right)$.**\
-We can assess this assumption through an analysis of the residuals. We will note any non-linear trends.
+2. **$E\left[\textit{Heart Failure}\; |\; X\right] = P(Heart\; Failure = 1) = p$ is linear on the logit scale $\left(logit(p) = \frac{p}{1 - p}\right)$.**\
+We assessed this assumption through an analysis of the residuals. We did not detect any non-linear trends for any of our 3 covariates. It follows that the linearity assumption is defensible.
 
 &nbsp;
 
-3. **~10-20 events ($Death\;Event = 1$) per covariate.**\
+3. **~10-20 events (heart failure within 30 days) per covariate.**\
 This assumption is met as we have 35 events and our logistic LASSO fit has 3 covariates => 11.667 events per covariate. 
 
 &nbsp;
