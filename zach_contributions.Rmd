@@ -11,6 +11,8 @@ library(glmnet)
 library(dplyr)
 library(ggplot2)
 library(pROC)
+library(patchwork)
+library(ResourceSelection)
 ```
 
 *3. Analysis Plan: (20pts) Clearly update your analysis plan at this stage, or specifically outline/delineate such if you did not earlier. This may simply involve a few updates and additions, or it may require more substantial changes, given you’ve progressed further into the course and thus have been exposed to additional analysis methods. Make very clear what your plans are, drawing on what you’ve learned in the course and beyond.*
@@ -161,12 +163,15 @@ Our cross-validation algorithm suggests that the value of alpha which best minim
 
 ```{r}
 final_model <- glmnet::glmnet(
-  x = heart %>% select(-c(DEATH_EVENT, time, mortality_30)), #we won't scale so that we return coefficients in their natural scale.
+  x = heart %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)), #we won't scale so that we return coefficients in their natural scale.
         y = heart$mortality_30 %>% as.matrix(),
         family = "binomial",
         alpha = 1,
         lambda = 0.0301683
-          )
+)
+
+
+
 
 coef(final_model) %>% exp() %>% cbind(coef(final_model)) 
 ```
@@ -190,8 +195,8 @@ $\hat{p} = \frac{\exp(0.36332835 + 0.04139170 age  + 0.15083641creatinine -0.038
 
 ```{r}
 preds <- predict(final_model, 
-                 heart %>% select(-c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
-                 type = "response")
+                 heart %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
+                 type = "response")#[,1]
 
 glm_roc <- roc(response = as.numeric(heart$mortality_30), predictor = preds)
 
@@ -212,6 +217,106 @@ caret::confusionMatrix(as.factor(as.numeric(preds[,1] > min_sens_spec)),
                                  as.factor(as.numeric(heart$mortality_30)), 
                        positive = "1")
 ```
+
+### Distribution of Fitted values and Leverage (hat-values)
+```{r}
+fit_val <- ggplot(data.frame(preds = preds), aes(x = preds)) + geom_histogram() + ggtitle("Histogram of Fitted Values") + xlab(expression(hat(p))) 
+
+## We can't do hat values for this model, so here are influence plots for a non-lasso model.
+
+non_lasso <- glm(data = heart, formula = mortality_30 ~ age + serum_sodium + serum_creatinine,  family = "binomial")
+
+hat_val <- ggplot(heart, aes(hatvalues(non_lasso))) + geom_histogram() + ggtitle("Hat Matrix Values") + xlab("Hat Values") + ylab("Count")
+
+hat_val + fit_val
+
+
+
+```
+
+&nbsp;
+
+### Cook's Distance
+```{r}
+
+#hat values should be identical between LASSO and non-lasso
+hat_vals <- hatvalues(non_lasso)
+
+#grabbing residual formulas from this stackexchange https://stats.stackexchange.com/questions/1432/what-do-the-residuals-in-a-logistic-regression-mean
+lp = predict(final_model, 
+                 heart %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
+                 type = "link") [,1]
+mu = exp(lp) / (1+exp(lp))
+Y = heart$mortality_30 %>% as.numeric()
+
+
+work_residuals <- (Y-mu) / (mu*(1-mu)) ## type returned by function$residuals
+dev_residuals <- sqrt(-2*(Y*log(mu) + (1-Y)*log(1-mu))) *sign(Y-mu) #type used to get internally studentized residuals used in influencePlot
+my_int_student_resid <- dev_residuals / (sqrt(1-hat_vals))
+
+my_pearson_resid <- (Y-mu)/sqrt(mu*(1-mu))
+my_pearson_int_student_resid <- my_pearson_resid  / (sqrt(1-hat_vals))
+
+my_cookd <- ((my_pearson_int_student_resid / 2) ^2) * (hat_vals/(1-hat_vals)) #equivalent to cooks.distance(non_lasso)
+
+
+
+
+#influencePlot(non_lasso, col = "red")
+
+#reproduce the influence plot
+
+p <- length(coef(non_lasso))
+n <- sum(!is.na(my_int_student_resid))
+extreme_obs <- which(my_cookd > .05 | hat_vals > 3*p/n)
+
+
+plot(hat_vals,  my_int_student_resid, col = "red", cex = my_cookd*100, xlab = "Hat Values", ylab = "Internally Studentized Residuals")
+abline(h = c(-2, 0, 2), lty = 2)
+abline(v=c(2, 3)*p/n, lty=2)
+text(x=hat_vals[extreme_obs], y=my_int_student_resid[extreme_obs], labels=extreme_obs, pos=4, col="black", offset = -0.5)
+
+
+
+```
+
+&nbsp;
+
+**Observations 132, 187, and 196 only have large Studentized residuals, with their leverage and Cook's D. being small. Conversely, observation 61 has a small Studentized residual and Cook's D but a large leverage value. Likewise, observation 218 has a moderate Studentized residual and large leverage and Cook's D values.**
+
+&nbsp;
+
+### Residual analysis
+```{r}
+par(mfrow = c(2, 2))
+plot(heart$age, my_pearson_resid, xlab = "Age", ylab = "Pearson Residuals")
+plot(heart$serum_sodium, my_pearson_resid, xlab = "Serum Sodium", ylab = "Pearson Residuals")
+plot(heart$serum_creatinine, my_pearson_resid, xlab = "Serum Creatinine", ylab = "Pearson Residuals")
+plot(preds, my_pearson_resid, xlab = "Predicted Probability", ylab = "Pearson Residuals")
+```
+
+&nbsp;
+
+### Outlier Test
+```{r}
+#outlierTest(non_lasso)
+```
+
+&nbsp;
+
+**Not surprisingly, only observation 187 became a statistically significant outlier. This is because it has the largest studentized residual value.**
+
+**Based on the above, it seems that 218 may be the most "influential" observation, while observation 187 is the most significant outlier. We will re-run the above analysis with these points removed and note any appreciable change in the coefficients:**
+
+&nbsp;
+
+
+
+```{r}
+hoslem.test(heart$mortality_30, preds, g = 10)
+```
+
+
 
 
 
