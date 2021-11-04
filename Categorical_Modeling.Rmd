@@ -59,8 +59,8 @@ apply(dataset_wfactors, 2, function(x) sum(is.na(x)))
 
 **Assumptions:**\
 
-1. **The outcome `Death Event` $\sim Binomial(1, p)$, with the sample being IID.**\
-It is reasonable to assume that patients are independent with a constant probability of an event
+1. **The outcome `Death Event` $\sim Binomial(1, p)$, with the sample being independent and identically distributed (IID).**\
+It is reasonable to assume that patients are independent with a constant probability of an event, and that they come from the same underlying population.
 
 &nbsp;
 
