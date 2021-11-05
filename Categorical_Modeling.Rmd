@@ -59,7 +59,7 @@ apply(dataset_wfactors, 2, function(x) sum(is.na(x)))
 
 **Assumptions:**\
 
-1. **The outcome `Heart Failure` $\sim Binomial(1, p)$, with the sample being independent and identically distributed (IID).**\
+1. **The outcome `Heart Failure` $\sim Binomial(n, p)$, with the sample being independent and identically distributed (IID).**\
 It is reasonable to assume that patients are independent with a constant probability of an event, and that they come from the same underlying population.
 
 &nbsp;
@@ -126,11 +126,30 @@ outlierTest(logi_fit)
 
 &nbsp;
 
-### Interpretations of Beta Coefficients:
-
 ```{r}
+linear_mod = lm(data = dataset_wfactors,
+                serum_sodium ~ .-DEATH_EVENT)
 
 ```
 
-&nbsp;
+
+```{r}
+library(MASS)
+
+# Stepwise regression model
+step.model <- stepAIC(linear_mod, direction = "both", 
+                      trace = FALSE)
+pander(summary(step.model))
+```
+
+```{r}
+par(mfrow = c(2, 2))
+plot(step.model)
+```
+
+
+
+
+
+
 
