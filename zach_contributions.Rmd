@@ -1,0 +1,347 @@
+---
+title: "Problems 3, 5a, and 5c"
+author: "Zachary Clement"
+date: "11/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(glmnet)
+library(dplyr)
+library(ggplot2)
+library(pROC)
+library(patchwork)
+library(ResourceSelection)
+```
+
+*3. Analysis Plan: (20pts) Clearly update your analysis plan at this stage, or specifically outline/delineate such if you did not earlier. This may simply involve a few updates and additions, or it may require more substantial changes, given you’ve progressed further into the course and thus have been exposed to additional analysis methods. Make very clear what your plans are, drawing on what you’ve learned in the course and beyond.*
+
+
+Research Questions and Corresponding Analysis Plans
+
+Primary Questions #1 and #2: 
+
+#1: What is the probability that a patient will die within 30 days of experiencing heart failure, given their level of each health-related characteristic collected (at the time of heart failure) in this dataset?
+
+#2 Which health-related characteristics in this dataset are most predictive of death within 30 days after experiencing heart failure? Which (if any) seem to have no predictive power whatsoever?
+
+Analysis Plan: We will create a logistic regression model using an elastic net penalty in order to conduct feature selection and make clinical predictions about likelihood of death by heart disease for a given patient. 
+
+The use of an elastic penalty will allow our model to predict death with higher precision, though it will introduce some bias to our estimates of coefficients. 
+
+A subject matter expert suggested that clinically meaningful interactions might exist between diabetes and high blood pressure, between smoking and diabetes, and between sex and smoking, diabetes, and high blood pressure. We will include those interactions as possible covariates in our model. 
+
+We will assess the assumptions of the logistic regression model using appropriate graphics and metrics.
+
+We will standardize each independent variable before fitting the model.
+
+We will use k-fold cross-validation to select optimal values of ɑ and λ according to deviance. 
+
+We will report AUC for this “best model”, and determine the best cutoff value to use with our model in order to balance sensitivity and specificity.
+
+We will report on which predictor variables were non-zero and thus, which coefficients were more important for making predictions. 
+
+
+We will compare sensitivity, specificity, positive predictive value, and negative predictive value for predictions made by this model to models fit using K-nearest neighbors and random forest plots.
+
+
+Primary Question #3: What is the expected survival time of a patient experiencing heart failure, given their level of each health-related characteristic collected (at the time of heart failure) in this dataset?
+
+Analysis Plan: We will use a Cox proportional hazards model using an elastic net penalty to perform model selection and fit 𝛃 coefficients for prediction of time to death for patients with given characteristics. 
+
+We will use appropriate methods to handle censorship for those patients still living after follow-up
+We will include interaction effects in this model if they are suspected to exist, and we will transform highly skewed variables. 
+We will assess model assumptions using appropriate metrics and graphical methods.
+We will report beta coefficients and appropriate metrics for model fit. 
+We will report which variables were non-zero in this model, and compare with the non-zero variables in the logistic regression model. 
+
+
+*5a. (10pts) Linear, flexible/additive or other methods (LASSO, ridge) from this topic:*
+*i. If your analysis plan includes any of these approaches, please begin fitting such models, performing diagnostics and evaluation, model selection, interpretations, etc. Please give some summary bullet points including model statements, whether assumptions are met, any transformations, fitted model interpretations, plots which might be important, etc.*
+
+```{r}
+heart <- read.csv('heart_failure_clinical_records_dataset.csv')
+
+## exclude anyone who was lost before 30 days
+
+
+heart <- heart %>% 
+  mutate(mortality_30 = (heart$DEATH_EVENT) & (heart$time <= 30),
+         "serum_sodium:serum_creatinine" = serum_sodium*serum_creatinine,
+         "creatinine_phosphokinase:platelets" = platelets*creatinine_phosphokinase,
+         "diabetes:smoking"= diabetes*smoking,
+         "diabetes:high_blood_pressure" = diabetes*high_blood_pressure,
+         "diabetes:sex" = diabetes*sex,
+         "smoking:sex" = smoking*sex,
+         "high_blood_pressure:sex" = high_blood_pressure*sex) %>% 
+  filter(DEATH_EVENT == 1 | time > 30)
+
+##TODO: figure out what to do with people lost to follow-up before 30 days
+
+
+```
+
+
+```{r eval = FALSE}
+#need to change eval to true if you want this to work
+
+
+num_to_average <- 30
+num_alphas <- 11 #did this to get .1, .2, .3, etc
+num_folds <- 5 #if we do 30-day mortality it seems like we want fewer folds
+measure_type <- "deviance" #auc slows down the process a bunch
+
+alpha_vals <- seq(0, 1, length.out = num_alphas)
+
+lambda_matrix <- min_matrix <- matrix(nrow = num_to_average, ncol = num_alphas)
+
+colnames(min_matrix) <- colnames(lambda_matrix) <- alpha_vals
+
+
+
+for (i in 1:num_to_average) {
+  #separate individuals into different folds for each iteration
+  current_foldid <- sample(1:num_folds, size = nrow(heart), replace = T) 
+  
+  for (j in 1:num_alphas) {
+    cv_heart <-
+      glmnet::cv.glmnet(
+        x = heart %>% select(-c(DEATH_EVENT, time, mortality_30)) %>% scale(),
+        y = heart$mortality_30 %>% as.matrix(),
+        foldid = current_foldid, #this means we are testing on the same folds for each value of alpha in this fold division
+        type.measure = measure_type, 
+        alpha = alpha_vals[j], # 0 is ridge, 1 is lasso
+        relax = F,
+        family = "binomial"
+      )
+    
+    min_matrix[i, j] <- min(cv_heart$cvm)
+    lambda_matrix[i, j] <- cv_heart$lambda.min
+  }
+}
+
+min_df <- min_matrix %>% as.data.frame() %>% pivot_longer(cols = colnames(min_matrix))
+
+ggplot(data = min_df, aes(y = value,  x = factor(name))) + 
+  geom_boxplot() +
+  labs(x = "Alpha Value", y = "Deviance", title = "Minimum Deviance at Various Alpha Levels") +
+  theme_minimal()
+
+
+```
+
+
+```{r eval = F}
+
+alpha_lambda_table <- min_df %>% 
+  group_by(name) %>% 
+  summarise(Deviance = mean(value)) %>% 
+  cbind(lambda_matrix %>% 
+    as.data.frame() %>% 
+    pivot_longer(cols = colnames(lambda_matrix)) %>% 
+    group_by(name) %>%  
+    summarise(Lambda = mean(value)) %>% 
+    select(Lambda)
+  ) 
+
+alpha_lambda_table %>% 
+  kable(caption = "Best Lambda Values for levels of Alpha")
+
+
+
+best_lambda <- alpha_lambda_table$Lambda[which.min(alpha_lambda_table$Deviance)] 
+
+best_alpha <- alpha_lambda_table$name[which.min(alpha_lambda_table$Deviance)] %>% as.numeric()
+
+
+
+```
+
+Our cross-validation algorithm suggests that the value of alpha which best minimizes deviance is 1. That is, we will conduct a LASSO regression (with no ridge penalty) to model our data.
+
+
+```{r}
+final_model <- glmnet::glmnet(
+  x = heart %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)), #we won't scale so that we return coefficients in their natural scale.
+        y = heart$mortality_30 %>% as.matrix(),
+        family = "binomial",
+        alpha = 1,
+        lambda = 0.0301683
+)
+
+
+
+
+coef(final_model) %>% exp() %>% cbind(coef(final_model)) 
+```
+
+In order to develop parameter estimates, we will minimize the following expression:
+
+$$\sum_{i = 1}^n(log(\frac{p}{1-p}) -\beta_0 - \sum_{i = 1}^n(\beta_jX_{ij}))^2 + \alpha\lambda \sum_{j = 1}^{n}|\beta_j| + (1-\alpha)\lambda\sum_{j = 1}^{n}(\beta_j)^2$$
+
+That is, we attempt to fit $\beta$ parameters to reduce the distance between logit(p) and predicted logit(p), while retaining a penalty in order to prevent $\beta$ coefficients from growing too large.
+
+Our fitted model included non-zero coefficients for age, creatinine, and sodium. This means that we can best predict 30-day mortality using these three covariates alone. 
+
+After fitting our model, our predictions are made using the following model:
+
+$log(\frac{\hat{p}}{1-\hat{p}}) = 0.16410684 + 0.03993502 * age  + 0.14643609*creatinine -0.03603845 * sodium$
+
+which can be expressed as:
+
+$\hat{p} = \frac{\exp(0.36332835 + 0.04139170 age  + 0.15083641creatinine -0.03836699  sodium)}{1 + \exp(0.36332835 + 0.04139170 age  + 0.15083641creatinine -0.03836699  sodium)}$
+
+
+```{r}
+preds <- predict(final_model, 
+                 heart %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
+                 type = "response")#[,1]
+
+glm_roc <- roc(response = as.numeric(heart$mortality_30), predictor = preds)
+
+auc(glm_roc)
+
+sens_spec <-abs( glm_roc$sensitivities - glm_roc$specificities)
+
+
+
+min_sens_spec <- glm_roc$thresholds[which.min(sens_spec)]
+
+
+
+
+ggroc(list("Logistic Regression" = glm_roc )) + labs(col = "Model", title = "ROC Curve for Logistic Regression with LASSO Penalty", x = "Specificity", y = "Sensitivity") + geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1, col = "50/50 guess"),  linetype = "dashed")
+
+caret::confusionMatrix(as.factor(as.numeric(preds[,1] > min_sens_spec)), 
+                                 as.factor(as.numeric(heart$mortality_30)), 
+                       positive = "1")
+```
+
+### Distribution of Fitted values and Leverage (hat-values)
+```{r}
+fit_val <- ggplot(data.frame(preds = preds), aes(x = preds)) + geom_histogram() + ggtitle("Histogram of Fitted Values") + xlab(expression(hat(p))) 
+
+## We can't do hat values for this model, so here are influence plots for a non-lasso model.
+
+non_lasso <- glm(data = heart, formula = mortality_30 ~ age + serum_sodium + serum_creatinine,  family = "binomial")
+
+hat_val <- ggplot(heart, aes(hatvalues(non_lasso))) + geom_histogram() + ggtitle("Hat Matrix Values") + xlab("Hat Values") + ylab("Count")
+
+hat_val + fit_val
+
+
+
+```
+
+&nbsp;
+
+### Cook's Distance
+```{r}
+
+#hat values should be identical between LASSO and non-lasso
+hat_vals <- hatvalues(non_lasso)
+
+#grabbing residual formulas from this stackexchange https://stats.stackexchange.com/questions/1432/what-do-the-residuals-in-a-logistic-regression-mean
+lp = predict(final_model, 
+                 heart %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
+                 type = "link") [,1]
+mu = exp(lp) / (1+exp(lp))
+Y = heart$mortality_30 %>% as.numeric()
+
+
+work_residuals <- (Y-mu) / (mu*(1-mu)) ## type returned by function$residuals
+dev_residuals <- sqrt(-2*(Y*log(mu) + (1-Y)*log(1-mu))) *sign(Y-mu) #type used to get internally studentized residuals used in influencePlot
+my_int_student_resid <- dev_residuals / (sqrt(1-hat_vals))
+
+my_pearson_resid <- (Y-mu)/sqrt(mu*(1-mu))
+my_pearson_int_student_resid <- my_pearson_resid  / (sqrt(1-hat_vals))
+
+my_cookd <- ((my_pearson_int_student_resid / 2) ^2) * (hat_vals/(1-hat_vals)) #equivalent to cooks.distance(non_lasso)
+
+
+
+
+#influencePlot(non_lasso, col = "red")
+
+#reproduce the influence plot
+
+p <- length(coef(non_lasso))
+n <- sum(!is.na(my_int_student_resid))
+extreme_obs <- which(my_cookd > .05 | hat_vals > 3*p/n)
+
+
+plot(hat_vals,  my_int_student_resid, col = "red", cex = my_cookd*100, xlab = "Hat Values", ylab = "Internally Studentized Residuals")
+abline(h = c(-2, 0, 2), lty = 2)
+abline(v=c(2, 3)*p/n, lty=2)
+text(x=hat_vals[extreme_obs], y=my_int_student_resid[extreme_obs], labels=extreme_obs, pos=4, col="black", offset = -0.5)
+
+
+
+```
+
+&nbsp;
+
+**Observations 132, 187, and 196 only have large Studentized residuals, with their leverage and Cook's D. being small. Conversely, observation 61 has a small Studentized residual and Cook's D but a large leverage value. Likewise, observation 218 has a moderate Studentized residual and large leverage and Cook's D values.**
+
+&nbsp;
+
+### Residual analysis
+```{r}
+par(mfrow = c(2, 2))
+plot(heart$age, my_pearson_resid, xlab = "Age", ylab = "Pearson Residuals")
+plot(heart$serum_sodium, my_pearson_resid, xlab = "Serum Sodium", ylab = "Pearson Residuals")
+plot(heart$serum_creatinine, my_pearson_resid, xlab = "Serum Creatinine", ylab = "Pearson Residuals")
+plot(preds, my_pearson_resid, xlab = "Predicted Probability", ylab = "Pearson Residuals")
+```
+
+&nbsp;
+
+### Outlier Test
+```{r}
+#outlierTest(non_lasso)
+```
+
+&nbsp;
+
+**Not surprisingly, only observation 187 became a statistically significant outlier. This is because it has the largest studentized residual value.**
+
+**Based on the above, it seems that 218 may be the most "influential" observation, while observation 187 is the most significant outlier. We will re-run the above analysis with these points removed and note any appreciable change in the coefficients:**
+
+&nbsp;
+
+
+
+```{r}
+hoslem.test(heart$mortality_30, preds, g = 10)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+*5c. (5pts) Poisson:*
+*i. Please consider ways to evaluate your data involving a Poisson Regression approach, even if your intention was not initially to include such (perhaps this could be a sub-study, or used to answer secondary questions). Outline how you would set up this analysis, and then fit one or more Poisson models and interpret the results. If your data were not collected or arranged in a format that would facilitate a Poisson approach, please consider whether there are ways to reformulate a variable(s) of interest in such a way that would warrant Poisson regression.*
+
+Our data in its current form is not amenable to a poisson regression approach for several reasons. 
+
+First, our response variable is not a count or a rate. The maximum "count" of our response variable (death) for each individual is 1 because we are working with humans, not cats. It would not make sense to treat this as a count or rate.
+
+Second, our primary research question involves predicting an individual's death status, not predicting the death status of a population. We would not be able to predict an individual's death status if we used population rates.
+
+If our data were collected in a different format, we could have used poisson regression to answer this research question. If we collected rates of post-surgery heart disease deaths for a few different clinics, and we collected aggregate statistics on smoking rates, age, and diabetes rates for those clinics, we could analyze these data using a poisson regression. 
+
+However, in order for rates of post-surgery deaths after surgeries from a given clinic (a binomial distribution) to follow a poisson distribution, we would need to have clinics with a very large number of individuals and a very low probability of post-surgery death for each individual. If post-surgery heart disease death rates in our current data are typical, this assumption would probably not be met because 30-day mortality rates were `r round(mean(heart$mortality_30) * 100, digits = 2) ` percent of our population.
+
+
+
+*ii. If your data and project are truly not supportive of any Poisson modeling, please answer No to this problem and explain why not. (Choosing this option simply because you don’t want to spend time attempting any Poisson modeling, is not sufficient.)*
+
