@@ -1,0 +1,194 @@
+---
+title: "Survival Analysis"
+author: "Dan Nolte"
+date: "12/5/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(survival)
+library(foreign)
+library(tidyverse)
+library(ggplot2)
+library(survminer)
+library(ggpubr)
+library(glmnet)
+library(pander)
+```
+ 
+```{r}
+# 1. Load data
+data = read.csv("../data/heart_failure_clinical_records_dataset.csv")
+
+# 2. Plot survival curve
+y <- Surv(data$time, data$DEATH_EVENT)
+ys = survfit(y ~ 1, type="kaplan-meier")
+plot(ys, xlab="Days", ylab="Survival Probability", main="Kaplan Meier Surival Curve for Heart Failure Patients", mark.time=TRUE)
+abline(h = 0.50, col = "green")
+abline(h = 0.75, col = "green")
+abline(h = 0.25, col = "green")
+```
+
+```{r}
+# 3. Plot survival curves by binary covariates of interest
+
+# anaemia
+ys_anaemia = survfit(y ~ data$anaemia, type="kaplan-meier")
+ggsurvplot(ys_anaemia, data = data) + ggtitle("Kaplan Meier Surival Curve - By Anaemia Status")
+
+# diabetes
+ys_diabetes = survfit(y ~ data$diabetes, type="kaplan-meier")
+ggsurvplot(ys_diabetes, data = data) + ggtitle("Kaplan Meier Surival Curve - By Diabetes Status")
+
+# high blood pressure
+ys_hbp = survfit(y ~ data$high_blood_pressure, type="kaplan-meier")
+ggsurvplot(ys_hbp, data = data) + ggtitle("Kaplan Meier Surival Curve - By HBP Status")
+
+# sex
+ys_sex = survfit(y ~ data$sex, type="kaplan-meier")
+ggsurvplot(ys_sex, data = data) + ggtitle("Kaplan Meier Surival Curve - By Sex")
+
+# smoking
+ys_smoking = survfit(y ~ data$smoking, type="kaplan-meier")
+ggsurvplot(ys_smoking, data = data) + ggtitle("Kaplan Meier Surival Curve - By Smoking Status")
+```
+
+```{r}
+# 3. Fit Initial Cox Model
+
+# Try "Kitchen Sink" Approach for Variable Selection
+model1 = coxph(y ~ .-time-DEATH_EVENT, data = data)
+summary(model1)
+AIC(model1)
+
+# Try LASSO for variable selection
+x = data[, 1:11]
+min_lambda <- cv.glmnet(as.matrix(x), y, nfolds = 5, family = "cox", alpha = 1)$lambda.min
+fit <- glmnet(x, y, family = "cox", alpha = 1, lambda = min_lambda)
+coef(fit, lambda = min_lambda)
+```
+
+```{r}
+# 4. Try interaction terms, and backwards selection
+
+# Initial model
+model1 = coxph(y ~ age + anaemia + creatinine_phosphokinase + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium, data = data)
+summary(model1)
+AIC(model1)
+BIC(model1)
+
+# Remove creatinine_phosphokinase (doing so lowers BIC)
+model2 = coxph(y ~ age + anaemia + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium, data = data)
+summary(model2)
+AIC(model2)
+BIC(model2)
+
+# Include interaction term (lowers AIC and has biological basis according to domain expert)
+model3 = coxph(y ~ age + anaemia + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
+summary(model3)
+AIC(model3)
+BIC(model3)
+
+# Try removing higher p-value term: anaemia. 
+model4 = coxph(y ~ age + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
+summary(model4)
+AIC(model4)
+BIC(model4)
+
+model5 = coxph(y ~ age + anaemia + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
+summary(model5)
+AIC(model5)
+BIC(model5)
+
+# We'll stick with model3 because the above 2 models don't improve on model3 in terms of AIC.
+```
+
+```{r}
+# 5. Check the proportional hazards assumption
+resid.wt.scho <- cox.zph(model3)
+resid.wt.scho
+plot(resid.wt.scho)
+
+# Check log-log curves for anaemia and high blood pressure
+#log(-log(S)) vs. log(t)
+plot(ys_anaemia, fun = "cloglog", xlab = "Log(Time in months)",
+     ylab = "log-log survival", main = "Log-log curve by Anaemia Status") 
+
+plot(ys_hbp, fun = "cloglog", xlab = "Log(Time in months)",
+     ylab = "log-log survival", main = "Log-log curve by High Blood Pressure Status") 
+
+# remove high_blood_pressure and anaemia
+final_model = coxph(y ~ age + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
+summary(final_model)
+AIC(final_model)
+BIC(final_model)
+
+
+final_model = coxph(y ~ age + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
+summary(final_model)
+AIC(final_model)
+BIC(final_model)
+```
+
+```{r}
+# 6. Run model using all 3 tie-handing methodologies and compare results
+
+# Exact Method
+final_model = coxph(y ~ age + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, ties = "exact", data = data)
+summary(final_model)
+AIC(final_model)
+BIC(final_model)
+
+# Breslow Method
+final_model = coxph(y ~ age + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, ties = "breslow", data = data)
+summary(final_model)
+AIC(final_model)
+BIC(final_model)
+
+# Efron Method
+final_model = coxph(y ~ age + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, ties = "efron", data = data)
+summary(final_model)
+AIC(final_model)
+BIC(final_model)
+```
+
+
+```{r}
+# 7. Evaluate High influence points
+model2 = coxph(y ~ age + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
+
+ggcoxdiagnostics(model2, type = "dfbeta", linear.predictions = FALSE, ggtheme = theme_bw())
+```
+
+```{r}
+# 8. Check Martingale Residuals for non-linear ejection fraction
+
+ggcoxfunctional(y~ejection_fraction, data=data)
+
+# Adjust final model to include quadratic ejection fraction term
+final_model = coxph(y ~ age + ejection_fraction + I(ejection_fraction^2) + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
+summary(final_model)
+AIC(final_model)
+BIC(final_model)
+```
+
+
+```{r}
+summary(final_model)
+
+exp(0.049*10)
+
+# lower bound
+exp(((0.049 - 1.96*0.0091592)*10))
+
+# upper bound
+exp(((0.049 + 1.96*0.0091592)*10))
+
+
+
+
+```
