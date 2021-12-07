@@ -61,7 +61,9 @@ We will report which variables were non-zero in this model, and compare with the
 *i. If your analysis plan includes any of these approaches, please begin fitting such models, performing diagnostics and evaluation, model selection, interpretations, etc. Please give some summary bullet points including model statements, whether assumptions are met, any transformations, fitted model interpretations, plots which might be important, etc.*
 
 ```{r}
-heart <- read.csv('heart_failure_clinical_records_dataset.csv')
+heart <- read.csv('../data/heart_failure_clinical_records_dataset.csv')
+
+summary(heart)
 
 ## exclude anyone who was lost before 30 days
 
@@ -170,10 +172,13 @@ final_model <- glmnet::glmnet(
         lambda = 0.0301683
 )
 
+non_lasso <- glm(data = heart, formula = mortality_30 ~ age + serum_sodium + serum_creatinine,  family = "binomial")
 
 
 
 coef(final_model) %>% exp() %>% cbind(coef(final_model)) 
+
+coef(non_lasso) %>% exp() %>% cbind(coef(non_lasso)) 
 ```
 
 In order to develop parameter estimates, we will minimize the following expression:
@@ -188,15 +193,38 @@ After fitting our model, our predictions are made using the following model:
 
 $log(\frac{\hat{p}}{1-\hat{p}}) = 0.16410684 + 0.03993502 * age  + 0.14643609*creatinine -0.03603845 * sodium$
 
-which can be expressed as:
+Our non-losso model fitted model coefficients are as shown below:
 
-$\hat{p} = \frac{\exp(0.36332835 + 0.04139170 age  + 0.15083641creatinine -0.03836699  sodium)}{1 + \exp(0.36332835 + 0.04139170 age  + 0.15083641creatinine -0.03836699  sodium)}$
+$log(\frac{\hat{p}}{1-\hat{p}}) = 5.25695362 + 0.06377481 * age  + 0.27678794*creatinine -0.08693330 * sodium$
+
 
 
 ```{r}
-preds <- predict(final_model, 
-                 heart %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
-                 type = "response")#[,1]
+
+preds <- numeric(length = nrow(heart))
+num_folds <- 5
+
+cv_assignments <- sample(1:num_folds, size = nrow(heart), replace = T)
+
+for (i in 1:num_folds){
+  current_obs <- (cv_assignments == i)
+  current_model <- glmnet::glmnet(
+  x = heart[-current_obs,] %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)), #we won't scale so that we return coefficients in their natural scale.
+        y = heart[-current_obs,]$mortality_30 %>% as.matrix(),
+        family = "binomial",
+        alpha = 1,
+        lambda = 0.0301683
+)
+  preds[current_obs] <- predict(current_model, 
+                                   heart[current_obs,] %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
+                 type = "response")
+}
+
+
+
+# preds <- predict(final_model, 
+#                  heart %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
+#                  type = "response")#[,1]
 
 glm_roc <- roc(response = as.numeric(heart$mortality_30), predictor = preds)
 
@@ -213,7 +241,7 @@ min_sens_spec <- glm_roc$thresholds[which.min(sens_spec)]
 
 ggroc(list("Logistic Regression" = glm_roc )) + labs(col = "Model", title = "ROC Curve for Logistic Regression with LASSO Penalty", x = "Specificity", y = "Sensitivity") + geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1, col = "50/50 guess"),  linetype = "dashed")
 
-caret::confusionMatrix(as.factor(as.numeric(preds[,1] > min_sens_spec)), 
+caret::confusionMatrix(as.factor(as.numeric(preds > min_sens_spec)), 
                                  as.factor(as.numeric(heart$mortality_30)), 
                        positive = "1")
 ```
@@ -224,7 +252,7 @@ fit_val <- ggplot(data.frame(preds = preds), aes(x = preds)) + geom_histogram() 
 
 ## We can't do hat values for this model, so here are influence plots for a non-lasso model.
 
-non_lasso <- glm(data = heart, formula = mortality_30 ~ age + serum_sodium + serum_creatinine,  family = "binomial")
+
 
 hat_val <- ggplot(heart, aes(hatvalues(non_lasso))) + geom_histogram() + ggtitle("Hat Matrix Values") + xlab("Hat Values") + ylab("Count")
 
@@ -262,12 +290,13 @@ my_cookd <- ((my_pearson_int_student_resid / 2) ^2) * (hat_vals/(1-hat_vals)) #e
 
 
 
-#influencePlot(non_lasso, col = "red")
+#car::influencePlot(non_lasso, col = "red")
 
 #reproduce the influence plot
 
-p <- length(coef(non_lasso))
-n <- sum(!is.na(my_int_student_resid))
+p <- sum(coef(non_lasso) != 0)
+n <- nrow(heart)
+
 extreme_obs <- which(my_cookd > .05 | hat_vals > 3*p/n)
 
 
@@ -285,6 +314,43 @@ text(x=hat_vals[extreme_obs], y=my_int_student_resid[extreme_obs], labels=extrem
 **Observations 132, 187, and 196 only have large Studentized residuals, with their leverage and Cook's D. being small. Conversely, observation 61 has a small Studentized residual and Cook's D but a large leverage value. Likewise, observation 218 has a moderate Studentized residual and large leverage and Cook's D values.**
 
 &nbsp;
+
+
+```{r}
+## sensitivity analysis
+high_hat_vals <- order(hat_vals, decreasing = T)[1:3]
+high_cook_d <- order(my_cookd, decreasing = T)[1:3]
+
+
+
+
+
+extreme_obs <- c(high_hat_vals, high_cook_d)
+
+heart_sens <- heart[-extreme_obs,]
+
+sens_lasso <- glmnet::cv.glmnet(
+  x = heart_sens %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(), #we won't scale so that we return coefficients in their natural scale.
+        y = heart_sens$mortality_30 %>% as.matrix(),
+        family = "binomial",
+        alpha = 1
+)
+
+best_lambda = sens_lasso$lambda.min
+
+glmnet::glmnet(
+  x = heart_sens %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(), #we won't scale so that we return coefficients in their natural scale.
+        y = heart_sens$mortality_30 %>% as.matrix(),
+        family = "binomial",
+        alpha = 1, 
+  lambda = best_lambda
+) |> coef()
+
+
+non_lasso_sens <- glm(data = heart_sens, formula = mortality_30 ~ age + serum_sodium + serum_creatinine,  family = "binomial")
+
+```
+
 
 ### Residual analysis
 ```{r}
