@@ -192,3 +192,33 @@ exp(((0.049 + 1.96*0.0091592)*10))
 
 
 ```
+
+
+```{r}
+## 9: Assess model performance
+
+
+# preds <- numeric(length = nrow(data))
+# num_folds <- 5
+# 
+# cv_assignments <- sample(1:num_folds, size = nrow(data), replace = T)
+# 
+# for (i in 1:num_folds){
+#   current_obs <- which(cv_assignments == i)
+#   current_data <- data[-current_obs,]
+#   
+#   y <- Surv(current_data$time, current_data$DEATH_EVENT)
+#   
+#   current_model = coxph(y ~ age + ejection_fraction + I(ejection_fraction^2) + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = current_data)
+#   
+#   preds[current_obs] <- predict(current_model, 
+#                                    newdata = data[current_obs,], type = "risk")
+# }
+
+
+
+
+
+
+```
+
