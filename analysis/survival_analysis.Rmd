@@ -18,6 +18,7 @@ library(survminer)
 library(ggpubr)
 library(glmnet)
 library(pander)
+library(splines2)
 ```
  
 ```{r}
@@ -81,30 +82,17 @@ summary(model1)
 AIC(model1)
 BIC(model1)
 
-# Remove creatinine_phosphokinase (doing so lowers BIC)
-model2 = coxph(y ~ age + anaemia + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium, data = data)
+# Remove creatinine_phosphokinase and anaemia (doing so lowers BIC)
+model2 = coxph(y ~ age + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium, data = data)
 summary(model2)
 AIC(model2)
 BIC(model2)
 
 # Include interaction term (lowers AIC and has biological basis according to domain expert)
-model3 = coxph(y ~ age + anaemia + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
+model3 = coxph(y ~ age + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
 summary(model3)
 AIC(model3)
 BIC(model3)
-
-# Try removing higher p-value term: anaemia. 
-model4 = coxph(y ~ age + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
-summary(model4)
-AIC(model4)
-BIC(model4)
-
-model5 = coxph(y ~ age + anaemia + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
-summary(model5)
-AIC(model5)
-BIC(model5)
-
-# We'll stick with model3 because the above 2 models don't improve on model3 in terms of AIC.
 ```
 
 ```{r}
@@ -113,73 +101,75 @@ resid.wt.scho <- cox.zph(model3)
 resid.wt.scho
 plot(resid.wt.scho)
 
-# Check log-log curves for anaemia and high blood pressure
-#log(-log(S)) vs. log(t)
-plot(ys_anaemia, fun = "cloglog", xlab = "Log(Time in months)",
-     ylab = "log-log survival", main = "Log-log curve by Anaemia Status") 
+cox.zph(model3)
 
+# Check log-log curve for high blood pressure
+#log(-log(S)) vs. log(t)
 plot(ys_hbp, fun = "cloglog", xlab = "Log(Time in months)",
      ylab = "log-log survival", main = "Log-log curve by High Blood Pressure Status") 
 
-# remove high_blood_pressure and anaemia
-final_model = coxph(y ~ age + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
-summary(final_model)
-AIC(final_model)
-BIC(final_model)
-
-
-final_model = coxph(y ~ age + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
-summary(final_model)
-AIC(final_model)
-BIC(final_model)
 ```
 
 ```{r}
-# 6. Run model using all 3 tie-handing methodologies and compare results
-
-# Exact Method
-final_model = coxph(y ~ age + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, ties = "exact", data = data)
-summary(final_model)
-AIC(final_model)
-BIC(final_model)
-
-# Breslow Method
-final_model = coxph(y ~ age + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, ties = "breslow", data = data)
-summary(final_model)
-AIC(final_model)
-BIC(final_model)
-
-# Efron Method
-final_model = coxph(y ~ age + ejection_fraction + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, ties = "efron", data = data)
-summary(final_model)
-AIC(final_model)
-BIC(final_model)
-```
-
-
-```{r}
-# 7. Evaluate High influence points
-model2 = coxph(y ~ age + ejection_fraction + high_blood_pressure + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
-
-ggcoxdiagnostics(model2, type = "dfbeta", linear.predictions = FALSE, ggtheme = theme_bw())
-```
-
-```{r}
-# 8. Check Martingale Residuals for non-linear ejection fraction
+# 6. Check Martingale Residuals for non-linear ejection fraction
 
 ggcoxfunctional(y~ejection_fraction, data=data)
 
-# Adjust final model to include quadratic ejection fraction term
-final_model = coxph(y ~ age + ejection_fraction + I(ejection_fraction^2) + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
-summary(final_model)
-AIC(final_model)
-BIC(final_model)
+# Check binary ejection_fraction
+data$HFrEF = as.factor(ifelse(data$ejection_fraction <= 40, 1, 0))
+model4 = coxph(y ~ age + HFrEF + high_blood_pressure + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
+summary(model4)
+AIC(model4)
+BIC(model4)
+
+# Check cubic spline with a knot at 40
+model5 = coxph(y ~ age + bSpline(ejection_fraction, degree = 3, knots = c(40)) + high_blood_pressure + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine, data = data)
+summary(model5)
+AIC(model5)
+BIC(model5)
+
+# Check quadratic ejection fraction
+model6 = coxph(y ~ age + ejection_fraction + I(ejection_fraction^2) + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine + high_blood_pressure, data = data)
+summary(model6)
+AIC(model6)
+BIC(model6)
+
+# Quadratic ejection fraction gives the best AIC results - we will use this going forward.
+```
+
+```{r}
+# 7. Run model using all 3 tie-handing methodologies and compare results
+
+# Exact Method
+model7 = coxph(y ~ age + ejection_fraction + I(ejection_fraction^2) + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine + high_blood_pressure, ties = "exact", data = data)
+summary(model7)
+AIC(model7)
+BIC(model7)
+
+# Breslow Method
+model_8 = coxph(y ~ age + ejection_fraction + I(ejection_fraction^2) + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine + high_blood_pressure, ties = "breslow", data = data)
+summary(model_8)
+AIC(model_8)
+BIC(model_8)
+
+# Efron Method
+model_9 = coxph(y ~ age + ejection_fraction + I(ejection_fraction^2) + serum_creatinine + serum_sodium + serum_sodium*serum_creatinine + high_blood_pressure, ties = "efron", data = data)
+summary(model_9)
+AIC(model_9)
+BIC(model_9)
 ```
 
 
 ```{r}
-summary(final_model)
+# 8. Evaluate High influence points
+ggcoxdiagnostics(model_9, type = "dfbeta", linear.predictions = FALSE, ggtheme = theme_bw())
+```
 
+```{r}
+# Print final output
+summary(model_9)
+
+# Calculate interpretable conclusions
 exp(0.049*10)
 
 # lower bound
@@ -187,8 +177,4 @@ exp(((0.049 - 1.96*0.0091592)*10))
 
 # upper bound
 exp(((0.049 + 1.96*0.0091592)*10))
-
-
-
-
 ```
