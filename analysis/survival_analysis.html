@@ -280,16 +280,16 @@ fit &lt;- glmnet(x, y, family = &quot;cox&quot;, alpha = 1, lambda = min_lambda)
 coef(fit, lambda = min_lambda)</code></pre>
 <pre><code>## 11 x 1 sparse Matrix of class &quot;dgCMatrix&quot;
 ##                                     s0
-## age                       0.0385835501
-## anaemia                   0.2966676167
-## creatinine_phosphokinase  0.0001348628
+## age                       0.0369513091
+## anaemia                   0.2489907841
+## creatinine_phosphokinase  0.0001066945
 ## diabetes                  .           
-## ejection_fraction        -0.0408512088
-## high_blood_pressure       0.3704773583
+## ejection_fraction        -0.0386076231
+## high_blood_pressure       0.3332720256
 ## platelets                 .           
-## serum_creatinine          0.2888744645
-## serum_sodium             -0.0350301933
-## sex                      -0.0188502016
+## serum_creatinine          0.2834238563
+## serum_sodium             -0.0314244998
+## sex                       .           
 ## smoking                   .</code></pre>
 <pre class="r"><code># 4. Try interaction terms, and backwards selection
 
