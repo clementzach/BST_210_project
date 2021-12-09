@@ -201,7 +201,11 @@ $log(\frac{\hat{p}}{1-\hat{p}}) = 5.25695362 + 0.06377481 * age  + 0.27678794*cr
 
 ```{r}
 
-preds <- numeric(length = nrow(heart))
+set.seed(1)
+
+### Model Assessment:
+
+lasso_preds <- numeric(length = nrow(heart))
 num_folds <- 5
 
 cv_assignments <- sample(1:num_folds, size = nrow(heart), replace = T)
@@ -215,40 +219,76 @@ for (i in 1:num_folds){
         alpha = 1,
         lambda = 0.0301683
 )
-  preds[current_obs] <- predict(current_model, 
+  lasso_preds[current_obs] <- predict(current_model, 
                                    heart[current_obs,] %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
                  type = "response")
 }
 
 
 
-# preds <- predict(final_model, 
-#                  heart %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
-#                  type = "response")#[,1]
-
-glm_roc <- roc(response = as.numeric(heart$mortality_30), predictor = preds)
-
-auc(glm_roc)
-
-sens_spec <-abs( glm_roc$sensitivities - glm_roc$specificities)
 
 
+lasso_roc <- roc(response = as.numeric(heart$mortality_30), predictor = lasso_preds)
 
-min_sens_spec <- glm_roc$thresholds[which.min(sens_spec)]
+standard_preds <- numeric(length = nrow(heart))
+
+
+for (i in 1:num_folds){
+  current_obs <- (cv_assignments == i)
+  current_model <- glm( mortality_30 ~ serum_sodium + serum_creatinine + age, data = heart[-current_obs,],
+        family = "binomial"
+)
+  standard_preds[current_obs] <- predict(current_model, 
+                                   newdata = heart[current_obs,],
+                 type = "response")
+}
 
 
 
 
-ggroc(list("Logistic Regression" = glm_roc )) + labs(col = "Model", title = "ROC Curve for Logistic Regression with LASSO Penalty", x = "Specificity", y = "Sensitivity") + geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1, col = "50/50 guess"),  linetype = "dashed")
 
-caret::confusionMatrix(as.factor(as.numeric(preds > min_sens_spec)), 
+standard_roc <- roc(response = as.numeric(heart$mortality_30), predictor = standard_preds)
+
+auc(standard_roc)
+auc(lasso_roc)
+
+
+sens_spec_standard <-abs( standard_roc$sensitivities - standard_roc$specificities)
+
+min_sens_spec_standard <- standard_roc$thresholds[which.min(sens_spec_standard)]
+
+
+sens_spec_lasso <-abs( lasso_roc$sensitivities - lasso_roc$specificities)
+
+min_sens_spec_lasso <- lasso_roc$thresholds[which.min(sens_spec_lasso)]
+
+
+
+
+
+
+ggroc(list("LASSO Penalty" = lasso_roc,
+           "Unpenalized" = standard_roc)) + labs(col = "Model", title = "ROC Curves", x = "Specificity", y = "Sensitivity") + geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1, col = "50/50 guess"),  linetype = "dashed")
+
+caret::confusionMatrix(as.factor(as.numeric(lasso_preds > min_sens_spec_lasso)), 
+                                 as.factor(as.numeric(heart$mortality_30)), 
+                       positive = "1")
+
+
+caret::confusionMatrix(as.factor(as.numeric(standard_preds > min_sens_spec_standard)), 
                                  as.factor(as.numeric(heart$mortality_30)), 
                        positive = "1")
 ```
 
 ### Distribution of Fitted values and Leverage (hat-values)
 ```{r}
-fit_val <- ggplot(data.frame(preds = preds), aes(x = preds)) + geom_histogram() + ggtitle("Histogram of Fitted Values") + xlab(expression(hat(p))) 
+
+lasso_preds <- predict(final_model, 
+                  heart %>% dplyr::select(!c(DEATH_EVENT, time, mortality_30)) %>% as.matrix(),
+                  type = "response")#[,1]
+
+
+fit_val <- ggplot(data.frame(preds = lasso_preds), aes(x = lasso_preds)) + geom_histogram() + ggtitle("Histogram of Fitted Values") + xlab(expression(hat(p))) 
 
 ## We can't do hat values for this model, so here are influence plots for a non-lasso model.
 
@@ -290,7 +330,7 @@ my_cookd <- ((my_pearson_int_student_resid / 2) ^2) * (hat_vals/(1-hat_vals)) #e
 
 
 
-#car::influencePlot(non_lasso, col = "red")
+
 
 #reproduce the influence plot
 
@@ -300,7 +340,8 @@ n <- nrow(heart)
 extreme_obs <- which(my_cookd > .05 | hat_vals > 3*p/n)
 
 
-plot(hat_vals,  my_int_student_resid, col = "red", cex = my_cookd*100, xlab = "Hat Values", ylab = "Internally Studentized Residuals")
+plot(hat_vals,  my_int_student_resid, col = "red", cex = my_cookd*100, xlab = "Hat Values", ylab = "Internally Studentized Residuals", 
+     main = "Influence Plot for LASSO Logistic Regression")
 abline(h = c(-2, 0, 2), lty = 2)
 abline(v=c(2, 3)*p/n, lty=2)
 text(x=hat_vals[extreme_obs], y=my_int_student_resid[extreme_obs], labels=extreme_obs, pos=4, col="black", offset = -0.5)
@@ -358,14 +399,14 @@ par(mfrow = c(2, 2))
 plot(heart$age, my_pearson_resid, xlab = "Age", ylab = "Pearson Residuals")
 plot(heart$serum_sodium, my_pearson_resid, xlab = "Serum Sodium", ylab = "Pearson Residuals")
 plot(heart$serum_creatinine, my_pearson_resid, xlab = "Serum Creatinine", ylab = "Pearson Residuals")
-plot(preds, my_pearson_resid, xlab = "Predicted Probability", ylab = "Pearson Residuals")
+plot(lasso_preds, my_pearson_resid, xlab = "Predicted Probability", ylab = "Pearson Residuals")
 ```
 
 &nbsp;
 
 ### Outlier Test
 ```{r}
-#outlierTest(non_lasso)
+car::outlierTest(non_lasso)
 ```
 
 &nbsp;
@@ -379,11 +420,58 @@ plot(preds, my_pearson_resid, xlab = "Predicted Probability", ylab = "Pearson Re
 
 
 ```{r}
-hoslem.test(heart$mortality_30, preds, g = 10)
+hoslem.test(heart$mortality_30, lasso_preds, g = 10)
+```
+
+```{r}
+ summary(non_lasso)$coefficients %>% 
+  cbind( coef(final_model)[rownames(.),], .) %>% 
+  `colnames<-`(.,c("LASSO Estimate", "Standard Estimate", "Std. Error (standard)", "z value (standard)", "Pr(>|z|) (standard)")) %>% 
+  knitr::kable()
 ```
 
 
 
+We will now conduct goodness-of-fit analyses on the non-LASSO model. 
+
+```{r}
+## test 
+
+hoslem.test(heart$mortality_30, standard_preds, g = 10)
+
+
+car::outlierTest(non_lasso)
+
+car::influencePlot(non_lasso,col="red", main = "Influence Plot of Logistic Regression Model without LASSO Penalty")
+
+car::residualPlots(non_lasso, main = "Residual Plots of Logistic Regression Model without LASSO Penalty")
+
+## sensitivity analysis
+
+
+```
+
+Here is our sensitivity analysis, using the non-lasso model
+
+```{r}
+
+high_hat_vals <- order(hatvalues(non_lasso), decreasing = T)[1:3]
+high_cook_d <- order(cooks.distance(non_lasso), decreasing = T)[1:3]
+
+
+
+
+
+extreme_obs <- c(high_hat_vals, high_cook_d)
+
+heart_sens_standard <- heart[-extreme_obs,]
+
+
+sens_standard <- glm(mortality_30 ~ age + serum_sodium + serum_creatinine,  data = heart_sens_standard, family = "binomial")
+
+cbind("sensitivity" = coef(sens_standard), "original" = coef(non_lasso))
+
+```
 
 
 
