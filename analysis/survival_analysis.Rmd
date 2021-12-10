@@ -2,7 +2,9 @@
 title: "Survival Analysis"
 author: "Dan Nolte"
 date: "12/5/2021"
-output: html_document
+output:
+  html_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -10,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+library(knitr)
 library(survival)
 library(foreign)
 library(tidyverse)
@@ -29,9 +32,9 @@ data = read.csv("../data/heart_failure_clinical_records_dataset.csv")
 y <- Surv(data$time, data$DEATH_EVENT)
 ys = survfit(y ~ 1, type="kaplan-meier")
 plot(ys, xlab="Days", ylab="Survival Probability", main="Kaplan Meier Surival Curve for Heart Failure Patients", mark.time=TRUE)
-abline(h = 0.50, col = "green")
+abline(h = 0.50, col = "red")
 abline(h = 0.75, col = "green")
-abline(h = 0.25, col = "green")
+abline(h = 0.25, col = "blue")
 ```
 
 ```{r}
@@ -169,6 +172,9 @@ ggcoxdiagnostics(model_9, type = "dfbeta", linear.predictions = FALSE, ggtheme =
 # Print final output
 summary(model_9)
 
+knitr::kable(summary(model_9)$coefficients)
+
+summary(model_9)
 # Calculate interpretable conclusions
 exp(0.049*10)
 
